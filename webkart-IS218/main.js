@@ -60,19 +60,20 @@ function highlightStyle() {
 
 // -----------------------
 // Romlig filtrering (30 km)
+// SHIFT+klikk filtrerer skredlaget
+// Dobbelklikk resetter filteret
 // -----------------------
 let filterCircle = null;
+const radiusMeters = 30000;
 
 function setVisible(layer, visible) {
   if (layer.setStyle) {
-    // polygon/linje/punkt (circleMarker har setStyle)
     layer.setStyle(
       visible
-        ? { opacity: 1, fillOpacity: 0.85 }
+        ? { opacity: 1, fillOpacity: 0.4 }
         : { opacity: 0, fillOpacity: 0 }
     );
   } else if (layer.setOpacity) {
-    // marker
     layer.setOpacity(visible ? 1 : 0);
   }
 }
@@ -84,7 +85,6 @@ function filterGeoJsonLayerWithinRadius(geoJsonLayer, centerLatLng, radiusMeters
     const feature = featureLayer.feature;
     if (!feature) return;
 
-    // centroid fungerer for punkt/linje/polygon
     const c = turf.centroid(feature);
     const distKm = turf.distance(center, c, { units: "kilometers" });
     const inside = distKm * 1000 <= radiusMeters;
@@ -102,7 +102,7 @@ function resetGeoJsonFilter(geoJsonLayer) {
 }
 
 // -----------------------
-// Lag 1: Fylke (Agder)
+// Lag 1: Fylke (Agder) – GeoJSON
 // -----------------------
 fetch("data/fylker_agder.geojson")
   .then((res) => {
@@ -125,67 +125,11 @@ fetch("data/fylker_agder.geojson")
   .catch((err) => console.error(err));
 
 // -----------------------
-// Lag 2: Brannstasjoner (punkt)
+// Lag 2: Skredfaresoner – GeoJSON
+// Fargekodes: orange = lav/middels, darkred = høy
+// SHIFT+klikk filtrerer dette laget innen 30 km
 // -----------------------
-let brannLayer = null;
-
-fetch("data/brannstasjon.geojson")
-  .then((res) => {
-    if (!res.ok) throw new Error("Fant ikke data/brannstasjon.geojson (404).");
-    return res.json();
-  })
-  .then((data) => {
-    brannLayer = L.geoJSON(data, {
-      pointToLayer: (feature, latlng) =>
-        L.circleMarker(latlng, {
-          radius: 6,
-          color: "red",
-          fillColor: "red",
-          fillOpacity: 0.85,
-        }),
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties || {};
-
-        // Robust navne-håndtering (felt kan variere)
-        const navn =
-          p.navn ||
-          p.NAVN ||
-          p.stasjonsnavn ||
-          p.STASJONSNAVN ||
-          p.name ||
-          "Brannstasjon";
-
-        const kommune =
-          p.kommune ||
-          p.kommunenavn ||
-          p.KOMMUNE ||
-          "";
-
-        const adresse =
-          p.adresse ||
-          p.vegadresse ||
-          p.ADRESSE ||
-          "";
-
-        // Popup ved klikk
-        layer.bindPopup(`
-          <strong>${navn}</strong><br>
-          ${kommune ? `Kommune: ${kommune}<br>` : ""}
-          ${adresse ? `Adresse: ${adresse}` : ""}
-        `);
-
-      },
-    }).addTo(map);
-
-    layerControl.addOverlay(brannLayer, "Brannstasjoner");
-  })
-  .catch((err) => console.error(err));
-
-
-
-
-  // SKRED //
-  let skredLayer = null;
+let skredLayer = null;
 
 fetch("data/skred.geojson")
   .then((res) => {
@@ -193,7 +137,7 @@ fetch("data/skred.geojson")
     return res.json();
   })
   .then((data) => {
-    console.log("Skredfaresoner:", data.features?.length);
+    console.log("Skredfaresoner lastet:", data.features?.length, "objekter");
 
     skredLayer = L.geoJSON(data, {
       style: (feature) => {
@@ -208,49 +152,112 @@ fetch("data/skred.geojson")
         return {
           color: high ? "darkred" : "orange",
           weight: 2,
-          fillOpacity: 0.25,
+          fillOpacity: 0.35,
         };
       },
       onEachFeature: (feature, layer) => {
         const p = feature.properties || {};
-        const title = p.navn || p.omrade || p.id || "Skredfaresone";
+        const title = p.navn || p.omrade || p.lokalId || "Skredfaresone";
         const fare = p.faregrad || p.klasse || p.nivaa || p.fare || "";
         const type = p.skredtype || p.type || "";
+        const opphav = p.opphav || "";
+        const dato = formatDate(p.datafangstdato || "");
 
         layer.bindPopup(`
-          <strong>${title}</strong><br>
-          ${fare ? `Faregrad/klasse: ${fare}<br>` : ""}
-          ${type ? `Type: ${type}` : ""}
+          <strong>🏔️ ${title}</strong><br>
+          ${fare ? `<b>Faregrad:</b> ${fare}<br>` : ""}
+          ${type ? `<b>Skredtype:</b> ${type}<br>` : ""}
+          ${opphav ? `<b>Kilde:</b> ${opphav}<br>` : ""}
+          ${dato ? `<b>Dato:</b> ${dato}` : ""}
         `);
       },
     }).addTo(map);
 
-    layerControl.addOverlay(skredLayer, "Skredfaresoner");
+    layerControl.addOverlay(skredLayer, "Skredfaresoner (GeoJSON)");
   })
   .catch((err) => console.error(err));
 
+// -----------------------
+// Lag 3: Fjelltopper i Agder – Kartverket Stedsnavn API (ekstern API)
+//
+// Vi henter stedsnavn av typen "Fjell" fra Kartverkets åpne API.
+// Deretter filtrerer vi client-side til å bare vise de som
+// ligger innenfor Agders geografiske grenser.
+// -----------------------
+
+const stedsnavnUrl =
+  "https://ws.geonorge.no/stedsnavn/v1/navn" +
+  "?navneobjekttype=Fjell" +
+  "&fnr=42" +
+  "&treffPerSide=500" +
+  "&side=1";
+
+fetch(stedsnavnUrl)
+  .then((res) => {
+    if (!res.ok) throw new Error(`Kartverket API feil: ${res.status}`);
+    return res.json();
+  })
+  .then((data) => {
+    const agderFjell = data.navn || [];
+    console.log("Fjelltopper i Agder:", agderFjell.length);
+
+    // Lag Leaflet-lag med ett punkt per fjell
+    const fjellLayerGroup = L.layerGroup();
+
+    agderFjell.forEach((sted) => {
+      const punkt = sted.representasjonspunkt;
+      const navn =
+        sted.stedsnavn?.[0]?.skrivemåte || "Ukjent fjell";
+      const kommune =
+        sted.kommuner?.[0]?.kommunenavn || "";
+      const type = sted.navneobjekttype || "Fjell";
+
+      const marker = L.circleMarker([punkt.nord, punkt.øst], {
+        radius: 5,
+        color: "#4a235a",
+        fillColor: "#9b59b6",
+        fillOpacity: 0.85,
+        weight: 1,
+      });
+
+      marker.bindPopup(`
+        <strong>⛰️ ${navn}</strong><br>
+        <b>Type:</b> ${type}<br>
+        ${kommune ? `<b>Kommune:</b> ${kommune}` : ""}
+      `);
+
+      fjellLayerGroup.addLayer(marker);
+    });
+
+    fjellLayerGroup.addTo(map);
+    layerControl.addOverlay(fjellLayerGroup, "Fjelltopper (Kartverket API)");
+  })
+  .catch((err) => {
+    console.error("Klarte ikke laste stedsnavn fra Kartverket:", err);
+  });
 
 // -----------------------
-// Interaksjon: SHIFT+klikk filtrerer, dblclick reset
+// Interaksjon:
+// SHIFT+klikk = filtrer skredfaresoner innen 30 km
+// Dobbelklikk = reset filter
 // -----------------------
-const radiusMeters = 30000;
 
-// SHIFT + klikk = filtrer brannstasjoner innen 30 km
 map.on("click", (e) => {
-  if (!brannLayer) return;
-
-  // Bare filtrer når du holder SHIFT
+  if (!skredLayer) return;
   if (!e.originalEvent.shiftKey) return;
 
   if (filterCircle) map.removeLayer(filterCircle);
-  filterCircle = L.circle(e.latlng, { radius: radiusMeters }).addTo(map);
+  filterCircle = L.circle(e.latlng, {
+    radius: radiusMeters,
+    color: "gray",
+    fillOpacity: 0.05,
+    dashArray: "6",
+  }).addTo(map);
 
-  filterGeoJsonLayerWithinRadius(brannLayer, e.latlng, radiusMeters);
+  filterGeoJsonLayerWithinRadius(skredLayer, e.latlng, radiusMeters);
 });
 
-// Dobbelklikk = reset filter
 map.on("dblclick", () => {
-  if (!brannLayer) return;
-  resetGeoJsonFilter(brannLayer);
+  if (!skredLayer) return;
+  resetGeoJsonFilter(skredLayer);
 });
-
