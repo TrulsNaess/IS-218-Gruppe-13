@@ -266,3 +266,73 @@ map.on("dblclick", () => {
   if (!skredLayer) return;
   resetGeoJsonFilter(skredLayer);
 });
+
+// -----------------------
+// Lag 4: Omvei ved skredfare – GeoJSON
+// -----------------------
+fetch("data/omvei.geojson")
+  .then(res => res.json())
+  .then(data => {
+    const omveiLayer = L.geoJSON(data, {
+      style: { color: "green", weight: 4 }
+    }).addTo(map);
+
+    layerControl.addOverlay(omveiLayer, "Skarpenglad - Omvei ved skredfare");
+  })
+  .catch(err => console.error(err));
+
+
+  // -----------------------
+// Lag: Bro (egen GeoJSON)
+// -----------------------
+fetch("data/bro.geojson")
+  .then(res => res.json())
+  .then(data => {
+    const broLayer = L.geoJSON(data, {
+      pointToLayer: (feature, latlng) => {
+        return L.circleMarker(latlng, {
+          radius: 5,
+          color: "green",
+          fillColor: "green",
+          fillOpacity: 0.9
+        });
+      }
+    }).addTo(map);
+
+    layerControl.addOverlay(broLayer, "Vennesla - Bro for omvei ved skredfare");
+  })
+  .catch(err => console.error(err));
+
+// -----------------------
+// Lag: Møtepunkt
+// -----------------------
+fetch("data/Møtepunkt.geojson")
+  .then(res => res.json())
+  .then(data => {
+    const møtepunktLayer = L.geoJSON(data, {
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup("Møtepunkt");
+      }
+    }).addTo(map);
+
+    layerControl.addOverlay(møtepunktLayer, " Vennesla - Møtepunkt ved evakuering");
+  })
+  .catch(err => console.error(err));
+
+
+// -----------------------
+// Lag: Møtepunkt
+// -----------------------
+
+fetch("data/Skarengland.geojson")
+  .then(res => res.json())
+  .then(data => {
+    const møtepunktLayer = L.geoJSON(data, {
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup("Møtepunkt");
+      }
+    }).addTo(map);
+
+    layerControl.addOverlay(møtepunktLayer, " Skarengland - Møtepunkt ved evakuering");
+  })
+  .catch(err => console.error(err));
