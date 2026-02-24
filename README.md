@@ -10,14 +10,26 @@ Applikasjonen består av tre hoveddeler: datakilder, klientlogikk, og presentasj
 ```mermaid
 flowchart TD
 
-    A[Datakilder<br><br>- Lokale GeoJSON (fylker, skred)<br>- Ekstern API (Kartverket)] --> B[Datainnhenting<br><br>fetch() i JavaScript]
+    A["Datakilder
+    - Lokale GeoJSON (fylker, skred)
+    - Ekstern API (Kartverket)"] --> B["Datainnhenting
+    fetch() i JavaScript"]
 
-    B --> C[Databehandling<br><br>- Parse GeoJSON<br>- Filtrering<br>- Fargevalg<br>- Popup-data]
+    B --> C["Databehandling
+    - Parse GeoJSON
+    - Filtrering
+    - Fargevalg
+    - Popup-data"]
 
-    C --> D[Kartvisning (Leaflet)<br><br>- Polygonlag<br>- Punktlag<br>- Interaksjon]
+    C --> D["Kartvisning (Leaflet)
+    - Polygonlag
+    - Punktlag
+    - Interaksjon"]
 
-    D --> E[Presentasjon i nettleseren<br><br>HTML + CSS + JS]
+    D --> E["Presentasjon i nettleseren
+    HTML + CSS + JS"]
 ```
+
 
 
 
