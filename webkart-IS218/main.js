@@ -187,8 +187,7 @@ fetch("data/skred.geojson")
 
 const stedsnavnUrl =
   "https://ws.geonorge.no/stedsnavn/v1/navn" +
-  "?navneobjekttype=Fjell" +
-  "&fnr=42" +
+  "?fnr=42" +
   "&treffPerSide=500" +
   "&side=1";
 
@@ -198,18 +197,24 @@ fetch(stedsnavnUrl)
     return res.json();
   })
   .then((data) => {
-    const agderFjell = data.navn || [];
+    const alle = data.navn || [];
+
+    // Filtrer til kun fjell/topper på vår side, siden APIet ikke støtter navneobjekttype-filter
+    const fjellTyper = ["Fjellområde", "Botn", "Dal", "Dalføre"];
+    const agderFjell = alle.filter((sted) =>
+      fjellTyper.includes(sted.navneobjekttype)
+    );
+
     console.log("Fjelltopper i Agder:", agderFjell.length);
 
-    // Lag Leaflet-lag med ett punkt per fjell
     const fjellLayerGroup = L.layerGroup();
 
     agderFjell.forEach((sted) => {
       const punkt = sted.representasjonspunkt;
-      const navn =
-        sted.stedsnavn?.[0]?.skrivemåte || "Ukjent fjell";
-      const kommune =
-        sted.kommuner?.[0]?.kommunenavn || "";
+      if (!punkt) return;
+
+      const navn = sted.skrivemåte || "Ukjent fjell";
+      const kommune = sted.kommuner?.[0]?.kommunenavn || "";
       const type = sted.navneobjekttype || "Fjell";
 
       const marker = L.circleMarker([punkt.nord, punkt.øst], {
@@ -221,7 +226,7 @@ fetch(stedsnavnUrl)
       });
 
       marker.bindPopup(`
-        <strong>⛰️ ${navn}</strong><br>
+        <strong>🏔️ ${navn}</strong><br>
         <b>Type:</b> ${type}<br>
         ${kommune ? `<b>Kommune:</b> ${kommune}` : ""}
       `);
@@ -230,7 +235,7 @@ fetch(stedsnavnUrl)
     });
 
     fjellLayerGroup.addTo(map);
-    layerControl.addOverlay(fjellLayerGroup, "Fjelltopper (Kartverket API)");
+    layerControl.addOverlay(fjellLayerGroup, "Fjellområder (Kartverket API)");
   })
   .catch((err) => {
     console.error("Klarte ikke laste stedsnavn fra Kartverket:", err);
