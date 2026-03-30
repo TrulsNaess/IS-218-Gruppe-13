@@ -1,0 +1,2 @@
+# Ignore local Supabase config with secrets
+/webkart-IS218/supabase-config.js

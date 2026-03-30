@@ -262,6 +262,166 @@ map.on("click", (e) => {
   filterGeoJsonLayerWithinRadius(skredLayer, e.latlng, radiusMeters);
 });
 
+// -----------------------
+// Supabase spatial RPC: normalt klikk (uten SHIFT)
+// Sender lat/lon til Supabase-funksjonen `get_features_within`
+// og viser resultatet som et GeoJSON-lag.
+// -----------------------
+let clickMarker = null;
+let clickCircle = null;
+let lastClickLatLng = null;
+
+// Wire up optional UI elements (may not exist in older pages)
+const radiusInput = document.getElementById("radiusInput");
+const radiusValue = document.getElementById("radiusValue");
+const adaptiveCheckbox = document.getElementById("adaptiveRadius");
+
+function getBaseRadius() {
+  if (radiusInput) return parseInt(radiusInput.value, 10) || 30000;
+  return 30000;
+}
+
+function formatDistance(m) {
+  if (m == null || isNaN(m)) return "";
+  if (m >= 1000) return (m / 1000).toFixed(1) + " km";
+  return Math.round(m) + " m";
+}
+
+// reflect slider value in UI
+if (radiusInput && radiusValue) {
+  radiusValue.textContent = radiusInput.value;
+  radiusInput.addEventListener("input", () => {
+    radiusValue.textContent = radiusInput.value;
+  });
+}
+
+function computeSearchRadius() {
+  const base = getBaseRadius();
+  if (adaptiveCheckbox && adaptiveCheckbox.checked) {
+    // simple adaptive rule: shrink radius at higher zooms
+    const zoom = map.getZoom();
+    // zoom 6 -> factor ~4, zoom 12 -> factor ~1
+    const factor = Math.max(0.5, Math.pow(2, (10 - zoom) / 4));
+    return Math.round(base * factor);
+  }
+  return base;
+}
+
+const rpcResultLayer = L.geoJSON(null, {
+  style: (feat) => ({
+    color: "#ffcc00",
+    weight: 3,
+    fillOpacity: 0.25,
+  }),
+  onEachFeature: (feature, layer) => {
+    const props = feature.properties || {};
+    const title = props.navn || props.lokalId || props.id || "Resultat";
+
+    // distance may come from server (distance_m) or we compute using turf from lastClickLatLng
+    let distLabel = "";
+    if (props.distance_m !== undefined && props.distance_m !== null) {
+      distLabel = formatDistance(Number(props.distance_m));
+    } else if (lastClickLatLng) {
+      try {
+        const centroid = turf.centroid(feature);
+        const dd = turf.distance(turf.point([lastClickLatLng.lng, lastClickLatLng.lat]), centroid, { units: "kilometers" }) * 1000;
+        distLabel = formatDistance(dd);
+      } catch (e) {
+        distLabel = "";
+      }
+    }
+
+    // Build a compact popup: name + properties (without geometry) + distance
+    const propCopy = { ...props };
+    delete propCopy.geometry;
+    const propText = Object.keys(propCopy).length ? `<pre>${JSON.stringify(propCopy, null, 2)}</pre>` : "";
+    const distanceHtml = distLabel ? `<div><strong>Avstand:</strong> ${distLabel}</div>` : "";
+
+    layer.bindPopup(`<strong>${title}</strong>${distanceHtml}${propText}`);
+  },
+}).addTo(map);
+
+map.on("click", async (e) => {
+  // Unngå å håndtere SHIFT-klikk her (det håndteres av eksisterende handler)
+  if (e.originalEvent.shiftKey) return;
+
+  lastClickLatLng = e.latlng;
+
+  // Vis markør og ring
+  if (clickMarker) map.removeLayer(clickMarker);
+  if (clickCircle) map.removeLayer(clickCircle);
+
+  const radiusToUse = computeSearchRadius();
+
+  clickMarker = L.marker(e.latlng).addTo(map);
+  clickCircle = L.circle(e.latlng, {
+    radius: radiusToUse,
+    color: "gray",
+    fillOpacity: 0.03,
+    dashArray: "6",
+  }).addTo(map);
+
+  // Kall Supabase RPC-funksjon
+  try {
+    const lat = e.latlng.lat;
+    const lon = e.latlng.lng;
+
+    if (!window.supabase) {
+      console.warn("Supabase-klient ikke initialisert. Sjekk index.html for SUPABASE_URL og SUPABASE_ANON_KEY.");
+      alert("Supabase ikke konfigurert. Se konsollen for detaljer.");
+      return;
+    }
+
+    const { data, error } = await window.supabase.rpc("get_features_within", {
+      lat_in: lat,
+      lon_in: lon,
+      radius_m_in: radiusToUse,
+    });
+
+    if (error) {
+      console.error("RPC-feil:", error);
+      alert("Feil ved spørring mot Supabase: " + error.message);
+      return;
+    }
+
+    // Supabase RPC returnerer ofte et array med ett element når returntypen er jsonb
+    let fc = null;
+    if (Array.isArray(data) && data.length > 0 && typeof data[0] === "object") {
+      const first = data[0];
+      const val = Object.values(first).find((v) => typeof v === "object");
+      fc = val || first;
+    } else {
+      fc = data;
+    }
+
+    rpcResultLayer.clearLayers();
+    let minDist = null;
+    if (fc && fc.type === "FeatureCollection" && Array.isArray(fc.features)) {
+      rpcResultLayer.addData(fc);
+      // Finn nærmeste avstand
+      fc.features.forEach(f => {
+        const d = f.properties && typeof f.properties.distance_m === 'number' ? f.properties.distance_m : null;
+        if (d !== null && (minDist === null || d < minDist)) minDist = d;
+      });
+      // Popup med antall og nærmeste avstand
+      const popupContent = `<b>Antall skred:</b> ${fc.features.length}<br>` +
+        (minDist !== null ? `<b>Nærmeste skred:</b> ${formatDistance(minDist)}` : "");
+      clickMarker.bindPopup(popupContent).openPopup();
+      // Safely get bounds and check validity across Leaflet versions
+      const bounds = rpcResultLayer.getBounds ? rpcResultLayer.getBounds() : null;
+      if (bounds && typeof bounds.isValid === "function" ? bounds.isValid() : (bounds && Object.keys(bounds).length)) {
+        map.fitBounds(bounds, { maxZoom: 14 });
+      }
+    } else {
+      clickMarker.bindPopup("Ingen treff innenfor radiusen.").openPopup();
+      console.log("Tomt eller uventet resultat fra Supabase:", fc);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Uventet feil ved søk: " + err.message);
+  }
+});
+
 map.on("dblclick", () => {
   if (!skredLayer) return;
   resetGeoJsonFilter(skredLayer);
