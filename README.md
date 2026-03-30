@@ -1,5 +1,7 @@
+# IS-218 Gruppe 13 Repository
+Gruppe 13 sitt repository for IS-218, vårsemesteret 2026.
+
 # 218-Oppgave-1
-Gruppe 13 sin repository for oppgave 1 i IS-218
 
 ## Prosjektnavn & TLDR
 Kartet vi har laget viser skredfaresoner og fjelltopper i Agder. Det gir viktig informasjon om risiko og sikkerhet, og hjelper til med å unngå områder med skredfare.
