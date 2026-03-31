@@ -4,7 +4,8 @@
 Vi har lagt til en funksjon i webkartet som lar brukeren finne alle punkter (f.eks. skredhendelser) innenfor en valgfri radius fra et valgt punkt. Radiusen kan endres av brukeren, for eksempel til 30 km, og resultatene oppdateres dynamisk i kartet. Dette gir mulighet for å utforske geografiske sammenhenger og risiko i et område.
 
 ### Demo av system
-![Demonstrasjon av webkartet](webkartGIF.gif)
+!![ScreenRecording2026-03-31at12 59 32-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/37968279-cf90-4e78-9452-53808d8fd361)
+
 
 ### SQL-snippet
 Her er SQL-funksjonen som er lagret i Supabase og brukes til å hente alle punkter innenfor valgt radius (kan endres, f.eks. 30 000 meter):
