@@ -44,4 +44,8 @@ $$;
 
 
 ### Notebook-guide
-*Legg inn link til notebook her når den er klar.*
+Først må du åpne Google colab linken vår:
+https://colab.research.google.com/drive/1ey9-2yTEjBSCmVt0VilnBpcoaWCjtvnt?usp=sharing
+
+Vi legger filen i repositoryet også, men du kommer nok til å få problemer til å kjøre det der, siden koden ble skrevet med å hente datasettene fra Google Disk.
+Derfor er det viktig at man leser "Koble til Google Drive". Denne gir steg for steg hvordan du skal få tilgang til datasettene.
