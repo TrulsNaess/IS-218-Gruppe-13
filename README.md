@@ -1,3 +1,125 @@
+# IS-218 Gruppe 13 – Semesteroppgave
+
+Gruppe 13 sitt repository for IS-218, vårsemesteret 2026.
+
+**Gruppedeltagere:** Emil André Johansen Haraldsø, Herman Berge Hansen, Herman Lonkemoen Haraldsen, Preben Jensen, Truls Næss
+
+---
+
+## 📋 Prosjektoversikt
+
+Dette repositoriet inneholder alle fire oppgavene for semesteret, strukturert som følger:
+
+### [Oppgave 1 – Webutvikling, GIS, Kartografi](Oppgave-1-WebGIS/)
+Grunnleggende webkart over Agder med Leaflet, som viser skredfaresoner og fjelltopper.
+
+- **Teknologi:** Leaflet, GeoJSON, OpenStreetMap, JavaScript Fetch API
+- **Output:** Interaktivt webkart med GeoJSON-lag og Kartverket API-data
+
+### [Oppgave 2 – GIScience og KI](Oppgave-2-GIScience/)
+Utvidelse av oppgave 1 med romlig analyse og spatial database-queries.
+
+- **Del A:** Klientside romlig filtrering (SHIFT+klikk = finn features innen 30 km)
+- **Del B:** Spatial queries i Supabase/PostGIS med RPC-funksjoner
+- **Teknologi:** Turf.js, PostGIS, Supabase, Python (GeoPandas)
+
+### [Oppgave 3 – Prosjektskisse](Oppgave-3-Prosjektskisse/)
+Detaljert skisse for semesterprosjektet.
+
+- **Problemstilling:** Hvordan kan en kartløsning visualisere kriseområder og veilede innbyggere til trygge tilfluktsrom?
+- **Tema:** Sivil beredskap og evakuering
+- **Datasett:** Tilfluktsrom-data (GML), vegnett, befolkningsdata
+
+### [Oppgave 4 – Semesterprosjekt](Oppgave-4-Semesterprosjekt/)
+Implementering av webløsning + rapport basert på prosjektskissen.
+
+- **Status:** Under utvikling
+- **Output:** Webapplikasjon + PDF-rapport (maks 10 sider)
+
+---
+
+## 🎯 Løsning
+
+**Problemstilling:** Hvordan kan en kartløsning visualisere kriseområder og veilede innbyggere til trygge tilfluktsrom?
+
+**Løsning (planlagt):**
+1. Interaktivt kart som visualiserer kriseområder (bruker tegner polygon/sirkel)
+2. Automatisk ruting fra kriseområde til nærmeste tilfluktsrom
+3. Visning av tilfluktsrom-informasjon (kapasitet, avstand, kontakt)
+4. Spatial database-queries for effektiv søking av ressurser
+
+---
+
+## 🛠️ Teknologi og verktøy
+
+| Lag | Teknologi |
+|-----|-----------|
+| **Frontend** | HTML5, CSS3, JavaScript (ES6), Leaflet v1.9.4 |
+| **Kartbibliotek** | Leaflet, Leaflet Draw, Leaflet Routing Machine |
+| **Backend / Database** | Supabase, PostgreSQL, PostGIS |
+| **Ruting** | OSRM eller Mapbox Directions API |
+| **Datasett** | GeoJSON, GML, Agder-data |
+| **Analyse** | Python (Pandas, GeoPandas) |
+| **Dataimport** | GDAL/Ogr2Ogr |
+| **Versjonskontroll** | Git/GitHub |
+| **Utvikling** | VSCode |
+
+---
+
+## 📊 Datasett
+
+| Datasett | Format | Kilde | Oppgave |
+|----------|--------|-------|---------|
+| Fylker Agder | GeoJSON | Lokal | 1, 2 |
+| Skredfaresoner | GeoJSON | Lokal | 1, 2 |
+| Fjelltopper | API (Kartverket) | Kartverket | 1 |
+| Tilfluktsrom | GML | Agder fylkeskommune | 4 |
+| Vegnett | GPKG | Lokal | 4 |
+
+---
+
+## 📚 Dokumentasjon
+
+- **Oppgave 1:** [README.md](Oppgave-1-WebGIS/README.md) – Webkart og GIS-grunnlag
+- **Oppgave 2:** [README.md](Oppgave-2-GIScience/README.md) – Spatial analyse og database
+- **Oppgave 3:** [README.md](Oppgave-3-Prosjektskisse/README.md) – Prosjektskisse og planer
+- **Oppgave 4:** [README.md](Oppgave-4-Semesterprosjekt/README.md) – Semesterprosjekt status
+
+---
+
+## 🚀 Kjøring av webkarten
+
+**Oppgave 1 & 2 (Enkel versjon):**
+```bash
+cd Oppgave-1-WebGIS/webkart-IS218
+# Åpne index.html i en nettleser, f.eks.:
+# Kan brukes med enkel HTTP-server:
+python -m http.server 8000
+# Besøk: http://localhost:8000
+```
+
+**Oppgave 4 (Full versjon):**
+```bash
+cd Oppgave-4-Semesterprosjekt
+# TBD – se README.md for instruksjoner når prosjektet er ferdig
+```
+
+---
+
+## 📝 Rapport
+
+Den samlede rapporten for mappen skal inneholde:
+- README.md + endringsbeskrivelser for oppgave 1, 2, 3
+- Semesterprosjekt-rapport (oppgave 4)
+
+Se oppgavebeskrivelsen for krav til format og innhold.
+
+---
+
+## 📞 Kontakt
+For spørsmål eller bidrag, se GitHub issues eller kontakt gruppen.
+
+**Sist oppdatert:** April 2026
 # IS-218 Gruppe 13 Repository
 Gruppe 13 sitt repository for IS-218, vårsemesteret 2026.
 
