@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sivil Beredskap – Evakueringsruter Agder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="header">
+    <h1>🚨 Sivil Beredskap – Evakueringsruter</h1>
+    <p>Klikk på kartet for å markere et kriseområde og se nærmeste evakueringsruter til tilfluktsrom</p>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="legend">
+    <div class="legend-title">Tegnforklaring</div>
+    <div class="legend-item"><span class="legend-box shelter"></span> Tilfluktsrom</div>
+    <div class="legend-item"><span class="legend-line route"></span> Evakueringsrute</div>
+    <div class="legend-item"><span class="legend-circle crisis"></span> Kriseområde</div>
+  </div>
+
+  <div id="info-panel" class="hidden">
+    <div id="info-content"></div>
+    <button id="reset-btn">✖ Nullstill</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
