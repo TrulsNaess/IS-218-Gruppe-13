@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <title>Sivil Beredskap – Evakueringsruter Agder</title>
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <div id="header">
     <h1>🚨 Sivil Beredskap – Evakueringsruter</h1>
-    <p>Klikk på kartet for å markere et kriseområde og se nærmeste evakueringsruter til tilfluktsrom</p>
+    <p>Klikk på kartet eller tegn et kriseområde</p>
+  </div>
+
+  <div id="tools">
+    <button id="draw-polygon-btn">✏️ Tegn kriseområdet</button>
+
+    <div id="radius-wrapper">
+      <label>Radius:</label>
+      <input type="range" id="radius-slider" min="0" max="100" value="50">
+      <span id="radius-value">1500 m</span>
+    </div>
   </div>
 
   <div id="map"></div>
@@ -28,6 +40,8 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
   <script src="supabase-config.js"></script>
   <script src="main.js"></script>

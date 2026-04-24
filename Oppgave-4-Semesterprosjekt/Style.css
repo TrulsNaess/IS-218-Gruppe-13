@@ -40,6 +40,46 @@ body {
   padding-top: 60px;
 }
 
+/* Tools */
+#tools {
+  position: absolute;
+  top: 70px;
+  left: 12px;
+  z-index: 1000;
+  background: rgba(20,20,40,0.92);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  backdrop-filter: blur(4px);
+  min-width: 200px;
+}
+
+#tools button {
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  width: 100%;
+}
+
+#radius-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#radius-slider {
+  width: 100%;
+}
+
+#radius-value {
+  font-size: 12px;
+  color: #ccc;
+}
+
 /* Legend */
 #legend {
   position: absolute;
