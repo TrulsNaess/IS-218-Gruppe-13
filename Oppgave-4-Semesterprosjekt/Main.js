@@ -6,9 +6,10 @@
 const cfg = window.SUPABASE_CONFIG || {};
 const SUPABASE_URL = cfg.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = cfg.SUPABASE_ANON_KEY || "";
+const ORS_API_KEY = cfg.ORS_API_KEY || "";
  
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn("Supabase ikke konfigurert. Sjekk supabase-config.js");
+  console.warn("Supabase ikke konfigurert.");
 } else {
   window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
@@ -31,6 +32,15 @@ function formatDistance(m) {
   if (m == null || isNaN(m)) return "Ukjent";
   if (m >= 1000) return (m / 1000).toFixed(1) + " km";
   return Math.round(m) + " m";
+}
+ 
+function formatDuration(seconds) {
+  if (seconds == null || isNaN(seconds)) return "Ukjent";
+  const min = Math.round(seconds / 60);
+  if (min < 60) return min + " min";
+  const h = Math.floor(min / 60);
+  const rest = min % 60;
+  return `${h} t ${rest} min`;
 }
  
 function showInfoPanel(html) {
@@ -65,12 +75,10 @@ const tilfluktsromLayer = L.geoJSON(null, {
   },
   onEachFeature: (feature, layer) => {
     const p = feature.properties || {};
-    const adresse = p.adresse || "Ukjent adresse";
-    const romnr = p.romnr || "";
     layer.bindPopup(`
       <strong>🛡️ Tilfluktsrom</strong><br>
-      <b>Adresse:</b> ${adresse}<br>
-      ${romnr ? `<b>Rom nr:</b> ${romnr}` : ""}
+      <b>Adresse:</b> ${p.adresse || "Ukjent adresse"}<br>
+      ${p.romnr ? `<b>Rom nr:</b> ${p.romnr}` : ""}
     `);
   }
 }).addTo(map);
@@ -79,17 +87,14 @@ async function lastAlleTilfluktsrom() {
   if (!window.supabaseClient) return;
   try {
     const { data, error } = await window.supabaseClient.rpc("get_shelters_within", {
-      lat_in: 58.3,
-      lon_in: 7.8,
-      radius_m_in: 200000
+      lat_in: 58.3, lon_in: 7.8, radius_m_in: 200000
     });
     if (error) { console.error("Tilfluktsrom feil:", error); return; }
-    let fc = Array.isArray(data)
+    const fc = Array.isArray(data)
       ? (Object.values(data[0] || {}).find(v => typeof v === "object") || data[0])
       : data;
     if (fc && fc.type === "FeatureCollection") {
       tilfluktsromLayer.addData(fc);
-      console.log("Tilfluktsrom lastet:", fc.features?.length);
     }
   } catch (e) {
     console.error("Klarte ikke laste tilfluktsrom:", e);
@@ -99,17 +104,15 @@ async function lastAlleTilfluktsrom() {
 lastAlleTilfluktsrom();
  
 // =======================
-// Finn nærmeste tilfluktsrom fra Supabase
+// Finn nærmeste tilfluktsrom
 // =======================
 async function finnNærmesteTilfluktsrom(lat, lng) {
   const { data, error } = await window.supabaseClient.rpc("get_shelters_within", {
-    lat_in: lat,
-    lon_in: lng,
-    radius_m_in: 50000
+    lat_in: lat, lon_in: lng, radius_m_in: 50000
   });
   if (error) throw new Error("Supabase feil: " + error.message);
  
-  let fc = Array.isArray(data)
+  const fc = Array.isArray(data)
     ? (Object.values(data[0] || {}).find(v => typeof v === "object") || data[0])
     : data;
  
@@ -123,10 +126,8 @@ async function finnNærmesteTilfluktsrom(lat, lng) {
  
   const nærmeste = sorted[0];
   const rawCoords = nærmeste.geometry.coordinates;
-  const p = nærmeste.properties;
- 
-  // MultiPoint har et ekstra nivå: coordinates[0] = [lng, lat]
   const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+  const p = nærmeste.properties;
  
   return {
     lat: Number(coords[1]),
@@ -139,44 +140,41 @@ async function finnNærmesteTilfluktsrom(lat, lng) {
 }
  
 // =======================
-// Sjekk om punkt er nær vegnett (innenfor ~300m)
+// ORS vegbasert rute
 // =======================
-async function erNærVeg(lat, lng) {
-  // 0.003 grader ≈ 300m
-  const { data, error } = await window.supabaseClient
-    .from("vegnett_krs")
-    .select("fid")
-    .filter("geom", "not.is", null)
-    .limit(1)
-    .rpc ? null : null; // ikke bruk rpc her
+async function hentOrsRute(fraLat, fraLng, tilLat, tilLng) {
+  const fLat = parseFloat(Number(fraLat).toFixed(6));
+  const fLng = parseFloat(Number(fraLng).toFixed(6));
+  const tLat = parseFloat(Number(tilLat).toFixed(6));
+  const tLng = parseFloat(Number(tilLng).toFixed(6));
  
-  // Enklere: prøv alltid routing, returner true
-  // Fallback håndteres av get_route som returnerer null
-  return true;
-}
+  console.log("ORS koordinater:", [[fLng, fLat], [tLng, tLat]]);
  
-// =======================
-// Hent rute fra Supabase pgRouting
-// =======================
-async function hentRute(fraLat, fraLng, tilLat, tilLng) {
-  const { data, error } = await window.supabaseClient.rpc("get_route", {
-    fra_lat: Number(fraLat),
-    fra_lng: Number(fraLng),
-    til_lat: Number(tilLat),
-    til_lng: Number(tilLng),
+  const res = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": ORS_API_KEY,
+    },
+    body: JSON.stringify({
+      coordinates: [[fLng, fLat], [tLng, tLat]]
+    })
   });
  
-  if (error) {
-    console.warn("Rute-feil:", error.message);
-    return null;
-  }
-  if (!data) {
-    console.warn("Ingen vegnett-rute funnet, bruker luftlinje.");
-    return null;
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error("ORS feil: " + err);
   }
  
-  console.log("Vegnett-rute hentet!");
-  return data;
+  const json = await res.json();
+  const feature = json.features?.[0];
+  if (!feature) throw new Error("Ingen rute fra ORS.");
+ 
+  return {
+    geojson: feature.geometry,
+    distance: feature.properties.summary.distance,
+    duration: feature.properties.summary.duration,
+  };
 }
  
 // =======================
@@ -186,6 +184,7 @@ let kriseMarker = null;
 let kriseCircle = null;
 let destinasjonMarker = null;
 let ruteLayer = null;
+let luftlinjeLag = null;
  
 map.on("click", async (e) => {
   const { lat, lng } = e.latlng;
@@ -194,21 +193,14 @@ map.on("click", async (e) => {
   if (kriseCircle)       map.removeLayer(kriseCircle);
   if (destinasjonMarker) map.removeLayer(destinasjonMarker);
   if (ruteLayer)         map.removeLayer(ruteLayer);
+  if (luftlinjeLag)      map.removeLayer(luftlinjeLag);
  
   kriseCircle = L.circle(e.latlng, {
-    radius: 1500,
-    color: "#e74c3c",
-    fillColor: "#e74c3c",
-    fillOpacity: 0.15,
-    weight: 2,
+    radius: 1500, color: "#e74c3c", fillColor: "#e74c3c", fillOpacity: 0.15, weight: 2,
   }).addTo(map);
  
   kriseMarker = L.circleMarker(e.latlng, {
-    radius: 6,
-    color: "#e74c3c",
-    fillColor: "#e74c3c",
-    fillOpacity: 1,
-    weight: 2,
+    radius: 6, color: "#e74c3c", fillColor: "#e74c3c", fillOpacity: 1, weight: 2,
   }).addTo(map);
  
   showInfoPanel(`<b>🔍 Søker etter nærmeste tilfluktsrom...</b>`);
@@ -223,40 +215,28 @@ map.on("click", async (e) => {
     const shelter = await finnNærmesteTilfluktsrom(lat, lng);
  
     if (!shelter) {
-      showInfoPanel(`
-        <b>🚨 Kriseområde markert</b><br><br>
-        ⚠️ Ingen tilfluktsrom funnet innenfor 50 km.
-      `);
+      showInfoPanel(`<b>🚨 Kriseområde markert</b><br><br>⚠️ Ingen tilfluktsrom funnet innenfor 50 km.`);
       return;
     }
  
-    showInfoPanel(`<b>🗺️ Beregner rute via vegnett...</b>`);
+    showInfoPanel(`<b>🗺️ Beregner rute...</b>`);
  
-    // 2) Hent rute fra pgRouting
-    let ruteGeojson = null;
+    // 2) Tegn alltid luftlinje (stiplet)
+    luftlinjeLag = L.polyline([[lat, lng], [shelter.lat, shelter.lng]], {
+      color: "#e74c3c", weight: 2, opacity: 0.5, dashArray: "6, 8",
+    }).addTo(map);
+ 
+    // 3) Prøv ORS vegbasert rute
+    let ruteInfo = null;
     try {
-      ruteGeojson = await hentRute(lat, lng, shelter.lat, shelter.lng);
-    } catch (ruteErr) {
-      console.warn("Ruting feilet:", ruteErr.message);
-    }
- 
-    // 3) Tegn ruten hvis vi fikk en
-    if (ruteGeojson) {
-      ruteLayer = L.geoJSON(ruteGeojson, {
-        style: {
-          color: "#e74c3c",
-          weight: 5,
-          opacity: 0.85,
-        }
+      const rute = await hentOrsRute(lat, lng, shelter.lat, shelter.lng);
+      ruteLayer = L.geoJSON(rute.geojson, {
+        style: { color: "#e74c3c", weight: 5, opacity: 0.85 }
       }).addTo(map);
-    } else {
-      // Fallback: tegn rett linje
-      ruteLayer = L.polyline([[lat, lng], [shelter.lat, shelter.lng]], {
-        color: "#e74c3c",
-        weight: 4,
-        opacity: 0.7,
-        dashArray: "8, 8",
-      }).addTo(map);
+      ruteInfo = { distance: rute.distance, duration: rute.duration, type: "vegbasert" };
+    } catch (orsErr) {
+      console.warn("ORS feilet, viser kun luftlinje:", orsErr.message);
+      ruteInfo = { type: "luftlinje" };
     }
  
     // 4) Marker tilfluktsrommet
@@ -264,15 +244,10 @@ map.on("click", async (e) => {
       icon: L.divIcon({
         className: "",
         html: `<div style="
-          background:#1a73e8;
-          border:3px solid white;
-          border-radius:3px;
-          width:18px;
-          height:18px;
-          box-shadow:0 2px 8px rgba(0,0,0,0.6);
+          background:#1a73e8;border:3px solid white;border-radius:3px;
+          width:18px;height:18px;box-shadow:0 2px 8px rgba(0,0,0,0.6);
         "></div>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9],
+        iconSize: [18, 18], iconAnchor: [9, 9],
       })
     }).addTo(map)
       .bindPopup(`
@@ -284,6 +259,12 @@ map.on("click", async (e) => {
       .openPopup();
  
     // 5) Infopanel
+    const ruteHtml = ruteInfo.type === "vegbasert"
+      ? `<b>Kjørerute:</b><br>
+         📏 ${formatDistance(ruteInfo.distance)}<br>
+         ⏱️ ${formatDuration(ruteInfo.duration)}`
+      : `⚠️ Vegbasert rute ikke tilgjengelig<br><small style="color:#aaa">Viser luftlinje</small>`;
+ 
     showInfoPanel(`
       <b>🚨 Kriseområde markert</b><br>
       <small style="color:#aaa">${lat.toFixed(4)}, ${lng.toFixed(4)}</small><br><br>
@@ -294,16 +275,15 @@ map.on("click", async (e) => {
         📍 ${formatDistance(shelter.distance_m)} luftlinje
       </div>
       <div class="route-item">
-        <b>Rute:</b><br>
-        ${ruteGeojson ? "🛣️ Via vegnett (Geonorge)" : "📏 Rett linje (fallback)"}
+        ${ruteHtml}
       </div>
     `);
  
     // 6) Zoom til ruten
-    if (ruteLayer) {
-      const bounds = ruteLayer.getBounds();
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [80, 80], maxZoom: 14 });
-    }
+    const bounds = ruteLayer
+      ? ruteLayer.getBounds()
+      : luftlinjeLag.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [80, 80], maxZoom: 14 });
  
   } catch (err) {
     console.error(err);
@@ -319,6 +299,7 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   if (kriseCircle)       { map.removeLayer(kriseCircle);       kriseCircle = null; }
   if (destinasjonMarker) { map.removeLayer(destinasjonMarker); destinasjonMarker = null; }
   if (ruteLayer)         { map.removeLayer(ruteLayer);         ruteLayer = null; }
+  if (luftlinjeLag)      { map.removeLayer(luftlinjeLag);      luftlinjeLag = null; }
   hideInfoPanel();
   map.setView([58.2, 8.0], 10);
 });
