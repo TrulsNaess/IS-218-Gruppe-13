@@ -38,21 +38,17 @@ let polygonDrawer = null;
 let drawnPolygon = null;
 let polygonMode = false;
 
-// =======================
-// Slider UI
-// =======================
+let crisisCenter = null;
+let crisisRadius = null; // meter
+let crisisIsPolygon = false;
+
+let evacSelectMode = false;
+let evacStartMarker = null;
+let evacRouteLayer = null;
+let evacDestMarker = null;
+
 const slider = document.getElementById("radius-slider");
 const radiusValue = document.getElementById("radius-value");
-
-slider.addEventListener("input", () => {
-  const newRadius = sliderToRadius(Number(slider.value));
-  radiusValue.textContent = newRadius + " m";
-
-  // Oppdater eksisterende sirkel live
-  if (kriseCircle && !polygonMode) {
-    kriseCircle.setRadius(newRadius);
-  }
-});
 
 // =======================
 // Hjelpefunksjoner
@@ -72,16 +68,6 @@ function formatDuration(seconds) {
   return `${h} t ${rest} min`;
 }
 
-function sliderToRadius(sliderValue) {
-  const minR = 100;     // minste radius
-  const maxR = 20000;   // største radius
-
-  const fraction = sliderValue / 100;
-  const radius = minR * Math.pow(maxR / minR, fraction);
-
-  return Math.round(radius);
-}
-
 function showInfoPanel(html) {
   document.getElementById("info-content").innerHTML = html;
   document.getElementById("info-panel").classList.remove("hidden");
@@ -91,9 +77,63 @@ function hideInfoPanel() {
   document.getElementById("info-panel").classList.add("hidden");
 }
 
-// =======================
+// Logaritmisk mapping: slider 0–100 → radius 100–20000 m
+function sliderToRadius(sliderValue) {
+  const minR = 100;
+  const maxR = 20000;
+  const fraction = sliderValue / 100;
+  const radius = minR * Math.pow(maxR / minR, fraction);
+  return Math.round(radius);
+}
+
+// Punkt-i-polygon (ray casting)
+function pointInPolygon(point, vs) {
+  let x = point.lng, y = point.lat;
+  let inside = false;
+
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    let xi = vs[i].lng, yi = vs[i].lat;
+    let xj = vs[j].lng, yj = vs[j].lat;
+
+    let intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+// Punkt-i-sirkel (haversine)
+function pointInCircle(point, center, radiusMeters) {
+  const R = 6371000;
+  const dLat = (point.lat - center.lat) * Math.PI / 180;
+  const dLng = (point.lng - center.lng) * Math.PI / 180;
+
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(center.lat * Math.PI/180) *
+            Math.cos(point.lat * Math.PI/180) *
+            Math.sin(dLng/2)**2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c;
+
+  return distance <= radiusMeters;
+}
+
+// Sjekk om punkt er inne i gjeldende kriseområde
+function isPointInsideCrisis(point) {
+  if (crisisIsPolygon && drawnPolygon) {
+    const latlngs = drawnPolygon.getLatLngs()[0];
+    return pointInPolygon(point, latlngs);
+  }
+  if (!crisisIsPolygon && crisisCenter && crisisRadius != null) {
+    return pointInCircle(point, crisisCenter, crisisRadius);
+  }
+  return false;
+}
+
 // Centroid av polygon
-// =======================
 function calculateCentroid(latlngs) {
   let x = 0, y = 0, z = 0;
 
@@ -118,6 +158,19 @@ function calculateCentroid(latlngs) {
     lng: lng * 180 / Math.PI
   };
 }
+
+// =======================
+// Slider UI
+// =======================
+slider.addEventListener("input", () => {
+  const newRadius = sliderToRadius(Number(slider.value));
+  radiusValue.textContent = newRadius + " m";
+
+  if (kriseCircle && !crisisIsPolygon) {
+    kriseCircle.setRadius(newRadius);
+    crisisRadius = newRadius;
+  }
+});
 
 // =======================
 // Tilfluktsrom-lag
@@ -206,6 +259,45 @@ async function finnNærmesteTilfluktsrom(lat, lng) {
   };
 }
 
+// Nærmeste tilfluktsrom utenfor kriseområdet
+async function finnNærmesteTilfluktsromUtenfor(lat, lng) {
+  const { data, error } = await window.supabaseClient.rpc("get_shelters_within", {
+    lat_in: lat, lon_in: lng, radius_m_in: 50000
+  });
+  if (error) throw new Error("Supabase feil: " + error.message);
+
+  const fc = Array.isArray(data)
+    ? (Object.values(data[0] || {}).find(v => typeof v === "object") || data[0])
+    : data;
+
+  if (!fc || !fc.features?.length) return null;
+
+  const filtrert = fc.features.filter(f => {
+    const rawCoords = f.geometry.coordinates;
+    const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+    const point = { lat: Number(coords[1]), lng: Number(coords[0]) };
+    return !isPointInsideCrisis(point);
+  });
+
+  if (!filtrert.length) return null;
+
+  filtrert.sort((a, b) => a.properties.distance_m - b.properties.distance_m);
+
+  const nærmeste = filtrert[0];
+  const rawCoords = nærmeste.geometry.coordinates;
+  const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+  const p = nærmeste.properties;
+
+  return {
+    lat: Number(coords[1]),
+    lng: Number(coords[0]),
+    adresse: p.adresse || "Ukjent adresse",
+    plasser: p.plasser || null,
+    romnr: p.romnr || null,
+    distance_m: p.distance_m,
+  };
+}
+
 // =======================
 // ORS vegbasert rute
 // =======================
@@ -243,20 +335,108 @@ async function hentOrsRute(fraLat, fraLng, tilLat, tilLng) {
 }
 
 // =======================
+// Evakueringsrute fra valgt punkt
+// =======================
+async function handleEvacRoute(lat, lng) {
+  if (!window.supabaseClient) return;
+
+  if (!crisisCenter && !drawnPolygon) {
+    showInfoPanel(`<b>⚠️ Ingen kriseområde definert.</b><br>Definer først et kriseområde.`);
+    return;
+  }
+
+  const point = { lat, lng };
+  if (!isPointInsideCrisis(point)) {
+    showInfoPanel(`<b>⚠️ Punktet må være inne i kriseområdet.</b><br>Velg et nytt punkt inne i det markerte området.`);
+    return;
+  }
+
+  if (evacStartMarker) { map.removeLayer(evacStartMarker); evacStartMarker = null; }
+  if (evacRouteLayer) { map.removeLayer(evacRouteLayer); evacRouteLayer = null; }
+  if (evacDestMarker) { map.removeLayer(evacDestMarker); evacDestMarker = null; }
+
+  evacStartMarker = L.circleMarker([lat, lng], {
+    radius: 6,
+    color: "#16a085",
+    fillColor: "#16a085",
+    fillOpacity: 1,
+    weight: 2,
+  }).addTo(map);
+
+  showInfoPanel(`<b>🧭 Evakueringsrute</b><br>🔍 Søker etter nærmeste tilfluktsrom utenfor kriseområdet...`);
+
+  try {
+    const shelter = await finnNærmesteTilfluktsromUtenfor(lat, lng);
+
+    if (!shelter) {
+      showInfoPanel(`<b>🧭 Evakueringsrute</b><br>⚠️ Fant ingen tilfluktsrom utenfor kriseområdet innenfor 50 km.`);
+      return;
+    }
+
+    const rute = await hentOrsRute(lat, lng, shelter.lat, shelter.lng);
+
+    evacRouteLayer = L.geoJSON(rute.geojson, {
+      style: { color: "#16a085", weight: 5, opacity: 0.9 }
+    }).addTo(map);
+
+    evacDestMarker = L.marker([shelter.lat, shelter.lng], {
+      icon: L.divIcon({
+        className: "",
+        html: `<div style="
+          background:#16a085;border:3px solid white;border-radius:3px;
+          width:18px;height:18px;box-shadow:0 2px 8px rgba(0,0,0,0.6);
+        "></div>`,
+        iconSize: [18, 18], iconAnchor: [9, 9],
+      })
+    }).addTo(map)
+      .bindPopup(`
+        <strong>🧭 Evakueringsrute – tilfluktsrom</strong><br>
+        <b>Adresse:</b> ${shelter.adresse}<br>
+        ${shelter.romnr ? `<b>Rom nr:</b> ${shelter.romnr}<br>` : ""}
+        ${shelter.plasser ? `<b>Plasser:</b> ${shelter.plasser}` : ""}
+      `);
+
+    const ruteHtml = `
+      <b>🧭 Evakueringsrute fra valgt punkt</b><br>
+      📏 ${formatDistance(rute.distance)}<br>
+      ⏱️ ${formatDuration(rute.duration)}<br><br>
+      <div class="shelter-item">
+        <b>Tilfluktsrom:</b><br>
+        🏠 ${shelter.adresse}<br>
+        ${shelter.plasser ? `👥 ${shelter.plasser} plasser<br>` : ""}
+      </div>
+    `;
+
+    showInfoPanel(ruteHtml);
+
+    const bounds = evacRouteLayer.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [80, 80], maxZoom: 14 });
+
+  } catch (e) {
+    console.error(e);
+    showInfoPanel(`<b>🧭 Evakueringsrute</b><br>❌ Feil ved beregning av rute: ${e.message}`);
+  }
+}
+
+// =======================
 // Hovedfunksjon: håndter kriseområde
 // =======================
 async function handleCrisisPoint(lat, lng, options = {}) {
   const usePolygon = options.usePolygon || false;
   const radius = sliderToRadius(Number(slider.value));
 
-  // Fjern gamle lag
   if (kriseMarker) map.removeLayer(kriseMarker);
   if (kriseCircle) map.removeLayer(kriseCircle);
   if (destinasjonMarker) map.removeLayer(destinasjonMarker);
   if (ruteLayer) map.removeLayer(ruteLayer);
   if (luftlinjeLag) map.removeLayer(luftlinjeLag);
 
-  // Tegn sirkel KUN hvis polygon IKKE brukes
+  // Evak-lag beholdes – de er knyttet til eget punkt
+
+  crisisCenter = { lat, lng };
+  crisisRadius = radius;
+  crisisIsPolygon = usePolygon;
+
   if (!usePolygon) {
     kriseCircle = L.circle([lat, lng], {
       radius: radius,
@@ -267,7 +447,6 @@ async function handleCrisisPoint(lat, lng, options = {}) {
     }).addTo(map);
   }
 
-  // Marker sentrum
   kriseMarker = L.circleMarker([lat, lng], {
     radius: 6,
     color: "#e74c3c",
@@ -288,7 +467,6 @@ async function handleCrisisPoint(lat, lng, options = {}) {
 
     showInfoPanel(`<b>🗺️ Beregner rute...</b>`);
 
-    // Luftlinje
     luftlinjeLag = L.polyline([[lat, lng], [shelter.lat, shelter.lng]], {
       color: "#e74c3c",
       weight: 2,
@@ -296,7 +474,6 @@ async function handleCrisisPoint(lat, lng, options = {}) {
       dashArray: "6, 8",
     }).addTo(map);
 
-    // ORS rute
     let ruteInfo = null;
     try {
       const rute = await hentOrsRute(lat, lng, shelter.lat, shelter.lng);
@@ -308,7 +485,6 @@ async function handleCrisisPoint(lat, lng, options = {}) {
       ruteInfo = { type: "luftlinje" };
     }
 
-    // Marker tilfluktsrom
     destinasjonMarker = L.marker([shelter.lat, shelter.lng], {
       icon: L.divIcon({
         className: "",
@@ -328,7 +504,7 @@ async function handleCrisisPoint(lat, lng, options = {}) {
       .openPopup();
 
     const ruteHtml = ruteInfo.type === "vegbasert"
-      ? `<b>Kjørerute:</b><br>
+      ? `<b>Kjørerute fra sentrum:</b><br>
          📏 ${formatDistance(ruteInfo.distance)}<br>
          ⏱️ ${formatDuration(ruteInfo.duration)}`
       : `⚠️ Vegbasert rute ikke tilgjengelig<br><small style="color:#aaa">Viser luftlinje</small>`;
@@ -345,6 +521,10 @@ async function handleCrisisPoint(lat, lng, options = {}) {
       <div class="route-item">
         ${ruteHtml}
       </div>
+      <small style="color:#aaa">
+        For evakueringsrute fra et annet sted i kriseområdet:<br>
+        trykk "Evakueringsrute fra valgt punkt" og klikk i området.
+      </small>
     `);
 
     const bounds = ruteLayer
@@ -360,11 +540,21 @@ async function handleCrisisPoint(lat, lng, options = {}) {
 }
 
 // =======================
-// Klikk på kartet (sirkelmodus)
+// Klikk på kartet
 // =======================
 map.on("click", (e) => {
-  if (polygonMode) return; // ikke tegn sirkel mens polygon tegnes
-  handleCrisisPoint(e.latlng.lat, e.latlng.lng);
+  if (polygonMode) return;
+
+  const { lat, lng } = e.latlng;
+
+  if (evacSelectMode) {
+    evacSelectMode = false;
+    handleEvacRoute(lat, lng);
+    return;
+  }
+
+  // Vanlig klikk: definer kriseområde (sirkel)
+  handleCrisisPoint(lat, lng, { usePolygon: false });
 });
 
 // =======================
@@ -372,6 +562,7 @@ map.on("click", (e) => {
 // =======================
 document.getElementById("draw-polygon-btn").addEventListener("click", () => {
   polygonMode = true;
+  evacSelectMode = false;
   polygonDrawer = new L.Draw.Polygon(map);
   polygonDrawer.enable();
 });
@@ -391,6 +582,18 @@ map.on(L.Draw.Event.CREATED, function (e) {
 });
 
 // =======================
+// Evakueringsknapp
+// =======================
+document.getElementById("evac-btn").addEventListener("click", () => {
+  if (!crisisCenter && !drawnPolygon) {
+    showInfoPanel(`<b>⚠️ Ingen kriseområde definert.</b><br>Definer først et kriseområde ved å klikke eller tegne.`);
+    return;
+  }
+  evacSelectMode = true;
+  showInfoPanel(`<b>🧭 Evakueringsrute</b><br>Klikk et punkt <b>inne i kriseområdet</b> for å beregne rute til nærmeste tilfluktsrom utenfor.`);
+});
+
+// =======================
 // Nullstill
 // =======================
 document.getElementById("reset-btn").addEventListener("click", () => {
@@ -400,6 +603,15 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   if (ruteLayer) { map.removeLayer(ruteLayer); ruteLayer = null; }
   if (luftlinjeLag) { map.removeLayer(luftlinjeLag); luftlinjeLag = null; }
   if (drawnPolygon) { map.removeLayer(drawnPolygon); drawnPolygon = null; }
+
+  if (evacStartMarker) { map.removeLayer(evacStartMarker); evacStartMarker = null; }
+  if (evacRouteLayer) { map.removeLayer(evacRouteLayer); evacRouteLayer = null; }
+  if (evacDestMarker) { map.removeLayer(evacDestMarker); evacDestMarker = null; }
+
+  crisisCenter = null;
+  crisisRadius = null;
+  crisisIsPolygon = false;
+  evacSelectMode = false;
 
   hideInfoPanel();
   map.setView([58.2, 8.0], 10);

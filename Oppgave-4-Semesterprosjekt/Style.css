@@ -51,24 +51,34 @@ body {
   border-radius: 8px;
   border: 1px solid #333;
   backdrop-filter: blur(4px);
-  min-width: 200px;
+  min-width: 230px;
 }
 
 #tools button {
   padding: 6px 10px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   background: #1a73e8;
   color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   width: 100%;
+  font-size: 13px;
+}
+
+#tools button#evac-btn {
+  background: #16a085;
+}
+
+#tools button:hover {
+  filter: brightness(1.05);
 }
 
 #radius-wrapper {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: 6px;
 }
 
 #radius-slider {
@@ -91,7 +101,7 @@ body {
   border-radius: 8px;
   padding: 12px 16px;
   backdrop-filter: blur(4px);
-  min-width: 180px;
+  min-width: 200px;
 }
 
 .legend-title {
@@ -135,6 +145,10 @@ body {
   background: #e74c3c;
 }
 
+.legend-line.evac {
+  background: #16a085;
+}
+
 .legend-circle {
   width: 14px;
   height: 14px;
@@ -155,7 +169,7 @@ body {
   border-radius: 8px;
   padding: 14px 16px;
   min-width: 240px;
-  max-width: 300px;
+  max-width: 320px;
   backdrop-filter: blur(4px);
 }
 
