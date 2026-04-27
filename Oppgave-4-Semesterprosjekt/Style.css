@@ -134,6 +134,16 @@ body {
   border: 2px solid white;
 }
 
+.legend-box.school-high {
+  background: #f1c40f;
+  border: 2px solid #f39c12;
+}
+
+.legend-box.school-basic {
+  background: #2ecc71;
+  border: 2px solid #27ae60;
+}
+
 .legend-line {
   width: 24px;
   height: 4px;

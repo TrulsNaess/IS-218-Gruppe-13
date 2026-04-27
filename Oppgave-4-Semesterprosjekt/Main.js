@@ -132,6 +132,125 @@ function safeNumber(value) {
   return 0;
 }
 
+function bytesToHex(bytes) {
+  if (!(bytes instanceof Uint8Array) && !(bytes instanceof ArrayBuffer)) return null;
+  const buffer = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+  return Array.from(buffer)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToBytes(hex) {
+  if (typeof hex !== "string") return null;
+  const cleaned = hex.trim().replace(/^0x/i, "");
+  const bytes = new Uint8Array(cleaned.length / 2);
+  for (let i = 0; i < cleaned.length; i += 2) {
+    bytes[i / 2] = parseInt(cleaned.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function parseWkbToGeoJSON(wkbHex) {
+  if (!wkbHex) return null;
+  if (typeof wkbHex === "object" && wkbHex.type && wkbHex.coordinates) {
+    return wkbHex;
+  }
+
+  let bytes = null;
+  if (typeof wkbHex === "string") {
+    bytes = hexToBytes(wkbHex);
+  } else if (wkbHex instanceof ArrayBuffer || wkbHex instanceof Uint8Array) {
+    bytes = wkbHex instanceof Uint8Array ? wkbHex : new Uint8Array(wkbHex);
+  } else if (wkbHex && wkbHex.data) {
+    bytes = new Uint8Array(wkbHex.data);
+  }
+
+  if (!bytes) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const littleEndian = view.getUint8(0) === 1;
+  let offset = 1;
+  let geomType = view.getUint32(offset, littleEndian);
+  offset += 4;
+  let srid = null;
+
+  const hasSrid = (geomType & 0x20000000) !== 0;
+  if (hasSrid) {
+    srid = view.getUint32(offset, littleEndian);
+    offset += 4;
+    geomType = geomType & 0x0fffffff;
+  }
+
+  if (geomType === 1) {
+    const x = view.getFloat64(offset, littleEndian);
+    const y = view.getFloat64(offset + 8, littleEndian);
+    return { type: "Point", coordinates: [x, y], crs: srid ? { type: "name", properties: { name: `EPSG:${srid}` } } : undefined };
+  }
+
+  if (geomType === 3) {
+    const ringCount = view.getUint32(offset, littleEndian);
+    offset += 4;
+    const rings = [];
+    for (let i = 0; i < ringCount; i++) {
+      const pointCount = view.getUint32(offset, littleEndian);
+      offset += 4;
+      const ring = [];
+      for (let j = 0; j < pointCount; j++) {
+        const x = view.getFloat64(offset, littleEndian);
+        const y = view.getFloat64(offset + 8, littleEndian);
+        offset += 16;
+        ring.push([x, y]);
+      }
+      rings.push(ring);
+    }
+    return { type: "Polygon", coordinates: rings, crs: srid ? { type: "name", properties: { name: `EPSG:${srid}` } } : undefined };
+  }
+
+  return null;
+}
+
+function rowToFeature(row, geomField = "geom") {
+  if (!row) return null;
+  const geomValue = row[geomField] ?? row.geom ?? row.geometry;
+  if (!geomValue) return null;
+  const geometry = parseWkbToGeoJSON(geomValue);
+  if (!geometry) return null;
+  const properties = { ...row };
+  delete properties[geomField];
+  delete properties.geom;
+  delete properties.geometry;
+  return {
+    type: "Feature",
+    geometry,
+    properties,
+  };
+}
+
+function getFeatureLabel(feature) {
+  const p = feature.properties || {};
+  const candidates = [
+    p.navn,
+    p.Navn,
+    p.name,
+    p.Name,
+    p.navn_skole,
+    p.skole_navn,
+    p.skole,
+    p.navn_punkter,
+    p.tittel,
+  ];
+  const label = candidates.find(v => typeof v === "string" && v.trim().length > 0);
+  if (label) return label;
+
+  for (const key of Object.keys(p)) {
+    const value = p[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return "Ukjent";
+}
+
 function parseFeatureCollection(data) {
   const fc = Array.isArray(data)
     ? (Object.values(data[0] || {}).find(v => typeof v === "object") || data[0])
@@ -298,6 +417,42 @@ const tilfluktsromLayer = L.geoJSON(null, {
     `);
   }
 }).addTo(map);
+
+const videregaendeSkolerLayer = L.geoJSON(null, {
+  pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+    radius: 8,
+    color: "#f39c12",
+    fillColor: "#f1c40f",
+    fillOpacity: 0.8,
+    weight: 2,
+  }),
+  onEachFeature: (feature, layer) => {
+    const p = feature.properties || {};
+    layer.bindPopup(`
+      <strong>🏫 Videregående skole</strong><br>
+      <b>Navn:</b> ${getFeatureLabel(feature)}<br>
+      ${p.adresse ? `<b>Adresse:</b> ${p.adresse}<br>` : ""}
+    `);
+  }
+}).addTo(map);
+
+const grunnskolerLayer = L.geoJSON(null, {
+  pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+    radius: 6,
+    color: "#27ae60",
+    fillColor: "#2ecc71",
+    fillOpacity: 0.8,
+    weight: 2,
+  }),
+  onEachFeature: (feature, layer) => {
+    const p = feature.properties || {};
+    layer.bindPopup(`
+      <strong>🏫 Grunnskole</strong><br>
+      <b>Navn:</b> ${getFeatureLabel(feature)}<br>
+      ${p.adresse ? `<b>Adresse:</b> ${p.adresse}<br>` : ""}
+    `);
+  }
+}).addTo(map);
  
 async function lastAlleTilfluktsrom() {
   if (!window.supabaseClient) return;
@@ -316,8 +471,41 @@ async function lastAlleTilfluktsrom() {
     console.error("Klarte ikke laste tilfluktsrom:", e);
   }
 }
+
+async function fetchTableFeatures(tableName, layer, label) {
+  if (!window.supabaseClient) return;
+  try {
+    const { data, error } = await window.supabaseClient.from(tableName).select("*");
+    if (error) {
+      console.error(`Feil ved henting av ${label}:`, error);
+      return;
+    }
+    if (!Array.isArray(data)) {
+      console.warn(`Uventet svar fra ${label}:`, data);
+      return;
+    }
+
+    const features = data.map(row => rowToFeature(row, "geom")).filter(Boolean);
+    console.info(`Hentet ${data.length} rader fra ${label}, opprettet ${features.length} features`);
+    if (features.length) {
+      layer.addData({ type: "FeatureCollection", features });
+    }
+  } catch (e) {
+    console.error(`Klarte ikke laste ${label}:`, e);
+  }
+}
+
+async function lastVideregaendeSkoler() {
+  await fetchTableFeatures("videregaende_skoler", videregaendeSkolerLayer, "videregående skoler");
+}
+
+async function lastGrunnskoler() {
+  await fetchTableFeatures("grunnskoler", grunnskolerLayer, "grunnskoler");
+}
  
 lastAlleTilfluktsrom();
+lastVideregaendeSkoler();
+lastGrunnskoler();
  
 // =======================
 // Hent befolkning i radius
