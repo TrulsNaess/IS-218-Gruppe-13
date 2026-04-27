@@ -1,5 +1,5 @@
 // =======================
-// Sivil Beredskap – Evakueringsruter Agder
+// SøkDekning – Evakueringsruter Agder
 // IS-218 Gruppe 13
 // =======================
  
@@ -258,6 +258,86 @@ function parseFeatureCollection(data) {
   return Array.isArray(fc?.features) ? fc.features : [];
 }
 
+function normalizeBefolkningResult(data) {
+  if (!data) return null;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+function getTotalBefolkning(data) {
+  const payload = normalizeBefolkningResult(data);
+  if (!payload) return null;
+  const value = payload.total_befolkning ?? payload.total_bef ?? payload.befolkning;
+  return value == null ? null : safeNumber(value);
+}
+
+async function fetchShelterFeaturesWithinRadius(lat, lng, radius) {
+  if (!window.supabaseClient) return [];
+  try {
+    const { data, error } = await window.supabaseClient.rpc("get_shelters_within", {
+      lat_in: lat,
+      lon_in: lng,
+      radius_m_in: radius
+    });
+    if (error) {
+      console.warn("Hent shelters innen radius feil:", error);
+      return [];
+    }
+    return parseFeatureCollection(data);
+  } catch (e) {
+    console.warn("Hent shelters innen radius feil:", e);
+    return [];
+  }
+}
+
+async function getShelterFeaturesInsidePolygon(latlngs) {
+  if (!Array.isArray(latlngs) || !latlngs.length) return [];
+
+  const center = calculateCentroid(latlngs);
+  const features = await fetchShelterFeaturesWithinRadius(center.lat, center.lng, 50000); // Stor radius for å få alle mulige
+
+  return features.filter(feature => {
+    const geometry = feature?.geometry;
+    if (!geometry || geometry.type !== "Point") return false;
+    const rawCoords = geometry.coordinates;
+    const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+    if (!Array.isArray(coords) || coords.length < 2) return false;
+    return pointInPolygon({ lat: Number(coords[1]), lng: Number(coords[0]) }, latlngs);
+  });
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (v) => v * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function estimatePolygonRadius(latlngs) {
+  if (!Array.isArray(latlngs) || !latlngs.length) return crisisRadius || 1000;
+  const center = crisisCenter || calculateCentroid(latlngs);
+  let maxDist = 0;
+  latlngs.forEach((latlng) => {
+    const d = haversineDistance(center.lat, center.lng, latlng.lat, latlng.lng);
+    if (d > maxDist) maxDist = d;
+  });
+  return Math.max(maxDist, crisisRadius || 100);
+}
+
+async function hentBefolkningForCrisisArea() {
+  if (!crisisCenter) return null;
+  if (crisisIsPolygon && drawnPolygon) {
+    const polygonLatLngs = drawnPolygon.getLatLngs()[0];
+    const searchRadius = Math.max(estimatePolygonRadius(polygonLatLngs), crisisRadius || 0);
+    return await hentBefolkning(crisisCenter.lat, crisisCenter.lng, searchRadius);
+  }
+  return await hentBefolkning(crisisCenter.lat, crisisCenter.lng, crisisRadius);
+}
+
 function getShelterFeaturesFromLayer() {
   const geojson = tilfluktsromLayer.toGeoJSON();
   let features = Array.isArray(geojson?.features) ? geojson.features : [];
@@ -316,18 +396,14 @@ async function calculateShelterCapacityInsideCrisis() {
     return await hentShelterCapacityFraServer(crisisCenter.lat, crisisCenter.lng, crisisRadius);
   }
 
-  const features = getShelterFeaturesFromLayer();
-  const insideFeatures = features.filter(feature => {
-    const geometry = feature?.geometry;
-    if (!geometry || geometry.type !== "Point") return false;
-    const rawCoords = geometry.coordinates;
-    const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
-    if (!Array.isArray(coords) || coords.length < 2) return false;
-    const point = { lat: Number(coords[1]), lng: Number(coords[0]) };
-    return isPointInsideCrisis(point);
-  });
+  if (!drawnPolygon) {
+    return { count: 0, totalCapacity: 0 };
+  }
 
-  return sumShelterFeatures(insideFeatures);
+  const latlngs = drawnPolygon.getLatLngs()[0];
+  const polygonRadius = estimatePolygonRadius(latlngs);
+  const radius = Math.max(crisisRadius || 0, polygonRadius);
+  return await hentShelterCapacityFraServer(crisisCenter.lat, crisisCenter.lng, Math.round(radius));
 }
  
 function calculateCentroid(latlngs) {
@@ -355,34 +431,35 @@ slider.addEventListener("input", async () => {
   radiusValue.textContent = newRadius + " m";
   if (kriseCircle && !crisisIsPolygon) {
     kriseCircle.setRadius(newRadius);
-    crisisRadius = newRadius;
- 
-    // Oppdater befolkningstall live
-    if (crisisCenter) {
-      const befolkning = await hentBefolkning(crisisCenter.lat, crisisCenter.lng, newRadius);
-      const totalBef = befolkning?.total_befolkning ?? null;
-      const befEl = document.getElementById("bef-tall");
-      const kapEl = document.getElementById("bef-kapasitet");
-      const shelterCountEl = document.getElementById("shelter-count");
-      const shelterCapacityEl = document.getElementById("shelter-capacity");
-      const crisisShelters = await calculateShelterCapacityInsideCrisis();
-      const plasser = crisisShelters.totalCapacity;
+  }
+  crisisRadius = newRadius;
 
-      if (befEl && totalBef !== null) {
-        befEl.textContent = `👥 ~${totalBef.toLocaleString("no")} personer`;
-      }
-      if (shelterCountEl) {
-        shelterCountEl.textContent = `${crisisShelters.count} tilfluktsrom i området`;
-      }
-      if (shelterCapacityEl) {
-        shelterCapacityEl.textContent = plasser
-          ? `👥 ${plasser.toLocaleString("no")} plasser total` : `👥 Ingen registrerte plasser i området`;
-      }
-      if (kapEl && totalBef !== null) {
-        kapEl.textContent = plasser && totalBef > plasser
-          ? `⚠️ Kapasitet for lav! ${totalBef.toLocaleString("no")} pers. vs ${plasser.toLocaleString("no")} plasser på ${crisisShelters.count} rom`
-          : plasser ? `✅ Tilstrekkelig kapasitet` : "Ingen tilfluktsrom funnet i området";
-      }
+  if (crisisCenter) {
+    const befolkning = crisisIsPolygon
+      ? await hentBefolkningForCrisisArea()
+      : await hentBefolkning(crisisCenter.lat, crisisCenter.lng, newRadius);
+    const totalBef = getTotalBefolkning(befolkning);
+    const befEl = document.getElementById("bef-tall");
+    const kapEl = document.getElementById("bef-kapasitet");
+    const shelterCountEl = document.getElementById("shelter-count");
+    const shelterCapacityEl = document.getElementById("shelter-capacity");
+    const crisisShelters = await calculateShelterCapacityInsideCrisis();
+    const plasser = crisisShelters.totalCapacity;
+
+    if (befEl && totalBef !== null) {
+      befEl.textContent = `👥 ~${totalBef.toLocaleString("no")} personer`;
+    }
+    if (shelterCountEl) {
+      shelterCountEl.textContent = `${crisisShelters.count} tilfluktsrom i området`;
+    }
+    if (shelterCapacityEl) {
+      shelterCapacityEl.textContent = plasser
+        ? `👥 ${plasser.toLocaleString("no")} plasser total` : `👥 Ingen registrerte plasser i området`;
+    }
+    if (kapEl && totalBef !== null) {
+      kapEl.textContent = plasser && totalBef > plasser
+        ? `⚠️ Kapasitet for lav! ${totalBef.toLocaleString("no")} pers. vs ${plasser.toLocaleString("no")} plasser på ${crisisShelters.count} rom`
+        : plasser ? `✅ Tilstrekkelig kapasitet` : "Ingen tilfluktsrom funnet i området";
     }
   }
 });
@@ -518,7 +595,7 @@ async function hentBefolkning(lat, lng, radiusM) {
       radius_m_in: radiusM
     });
     if (error) { console.warn("Befolkning feil:", error); return null; }
-    return data;
+    return normalizeBefolkningResult(data);
   } catch (e) {
     console.warn("Befolkning feil:", e);
     return null;
@@ -750,7 +827,7 @@ async function handleCrisisPoint(lat, lng, options = {}) {
     // Hent tilfluktsrom og befolkning parallelt
     const [shelter, befolkning] = await Promise.all([
       finnNærmesteTilfluktsrom(lat, lng),
-      hentBefolkning(lat, lng, radius)
+      crisisIsPolygon ? hentBefolkningForCrisisArea() : hentBefolkning(lat, lng, radius)
     ]);
  
     if (!shelter) {
@@ -800,7 +877,7 @@ async function handleCrisisPoint(lat, lng, options = {}) {
       : `⚠️ Vegbasert rute ikke tilgjengelig<br><small style="color:#aaa">Viser luftlinje</small>`;
  
     // Befolkningsinfo
-    const totalBef = befolkning?.total_befolkning ?? null;
+    const totalBef = getTotalBefolkning(befolkning);
     const crisisShelterCapacity = await calculateShelterCapacityInsideCrisis();
     const totalPlasser = crisisShelterCapacity.totalCapacity;
     let befolkningHtml = "";
