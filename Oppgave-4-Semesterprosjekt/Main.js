@@ -121,6 +121,96 @@ function isPointInsideCrisis(point) {
   return false;
 }
  
+function safeNumber(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const normalized = value.replace(/\s+/g, "").replace(/,/g, ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function parseFeatureCollection(data) {
+  const fc = Array.isArray(data)
+    ? (Object.values(data[0] || {}).find(v => typeof v === "object") || data[0])
+    : data;
+  return Array.isArray(fc?.features) ? fc.features : [];
+}
+
+function getShelterFeaturesFromLayer() {
+  const geojson = tilfluktsromLayer.toGeoJSON();
+  let features = Array.isArray(geojson?.features) ? geojson.features : [];
+  if (!features.length) {
+    const layers = tilfluktsromLayer.getLayers();
+    if (Array.isArray(layers)) {
+      features = layers
+        .filter(layer => layer && layer.feature)
+        .map(layer => layer.feature);
+    }
+  }
+  return features;
+}
+
+function sumShelterFeatures(features) {
+  let count = 0;
+  let totalCapacity = 0;
+
+  features.forEach(feature => {
+    const plasser = safeNumber(feature.properties?.plasser);
+    if (plasser > 0) {
+      count += 1;
+      totalCapacity += plasser;
+    }
+  });
+
+  return { count, totalCapacity };
+}
+
+async function hentShelterCapacityFraServer(lat, lng, radiusM) {
+  if (!window.supabaseClient) return { count: 0, totalCapacity: 0 };
+
+  try {
+    const { data, error } = await window.supabaseClient.rpc("get_shelters_within", {
+      lat_in: lat,
+      lon_in: lng,
+      radius_m_in: radiusM
+    });
+    if (error) {
+      console.warn("Shelter capacity feil:", error);
+      return { count: 0, totalCapacity: 0 };
+    }
+
+    const features = parseFeatureCollection(data);
+    return sumShelterFeatures(features);
+  } catch (e) {
+    console.warn("Shelter capacity feil:", e);
+    return { count: 0, totalCapacity: 0 };
+  }
+}
+
+async function calculateShelterCapacityInsideCrisis() {
+  if (!crisisCenter) return { count: 0, totalCapacity: 0 };
+
+  if (!crisisIsPolygon) {
+    return await hentShelterCapacityFraServer(crisisCenter.lat, crisisCenter.lng, crisisRadius);
+  }
+
+  const features = getShelterFeaturesFromLayer();
+  const insideFeatures = features.filter(feature => {
+    const geometry = feature?.geometry;
+    if (!geometry || geometry.type !== "Point") return false;
+    const rawCoords = geometry.coordinates;
+    const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+    if (!Array.isArray(coords) || coords.length < 2) return false;
+    const point = { lat: Number(coords[1]), lng: Number(coords[0]) };
+    return isPointInsideCrisis(point);
+  });
+
+  return sumShelterFeatures(insideFeatures);
+}
+ 
 function calculateCentroid(latlngs) {
   let x = 0, y = 0, z = 0;
   latlngs.forEach(latlng => {
@@ -154,16 +244,25 @@ slider.addEventListener("input", async () => {
       const totalBef = befolkning?.total_befolkning ?? null;
       const befEl = document.getElementById("bef-tall");
       const kapEl = document.getElementById("bef-kapasitet");
-      const plasserEl = document.getElementById("shelter-plasser");
-      const plasser = Number(plasserEl?.dataset.plasser || 0);
- 
+      const shelterCountEl = document.getElementById("shelter-count");
+      const shelterCapacityEl = document.getElementById("shelter-capacity");
+      const crisisShelters = await calculateShelterCapacityInsideCrisis();
+      const plasser = crisisShelters.totalCapacity;
+
       if (befEl && totalBef !== null) {
         befEl.textContent = `👥 ~${totalBef.toLocaleString("no")} personer`;
       }
+      if (shelterCountEl) {
+        shelterCountEl.textContent = `${crisisShelters.count} tilfluktsrom i området`;
+      }
+      if (shelterCapacityEl) {
+        shelterCapacityEl.textContent = plasser
+          ? `👥 ${plasser.toLocaleString("no")} plasser total` : `👥 Ingen registrerte plasser i området`;
+      }
       if (kapEl && totalBef !== null) {
         kapEl.textContent = plasser && totalBef > plasser
-          ? `⚠️ Kapasitet for lav! ${totalBef.toLocaleString("no")} pers. vs ${plasser.toLocaleString("no")} plasser`
-          : plasser ? `✅ Tilstrekkelig kapasitet` : "";
+          ? `⚠️ Kapasitet for lav! ${totalBef.toLocaleString("no")} pers. vs ${plasser.toLocaleString("no")} plasser på ${crisisShelters.count} rom`
+          : plasser ? `✅ Tilstrekkelig kapasitet` : "Ingen tilfluktsrom funnet i området";
       }
     }
   }
@@ -514,22 +613,24 @@ async function handleCrisisPoint(lat, lng, options = {}) {
  
     // Befolkningsinfo
     const totalBef = befolkning?.total_befolkning ?? null;
-    const plasser = shelter.plasser ? Number(shelter.plasser) : null;
+    const crisisShelterCapacity = await calculateShelterCapacityInsideCrisis();
+    const totalPlasser = crisisShelterCapacity.totalCapacity;
     let befolkningHtml = "";
  
     if (totalBef !== null) {
-      const kapasitetWarning = plasser && totalBef > plasser
-        ? `<br>⚠️ <b style="color:#e74c3c">Kapasitet for lav!</b> ${totalBef.toLocaleString("no")} pers. vs ${plasser.toLocaleString("no")} plasser`
-        : plasser
+      const kapasitetWarning = totalPlasser && totalBef > totalPlasser
+        ? `<br>⚠️ <b style="color:#e74c3c">Kapasitet for lav!</b> ${totalBef.toLocaleString("no")} pers. vs ${totalPlasser.toLocaleString("no")} plasser på ${crisisShelterCapacity.count} rom`
+        : totalPlasser
           ? `<br>✅ Tilstrekkelig kapasitet`
-          : "";
+          : "<br>⚠️ Ingen tilfluktsrom funnet i området";
  
       befolkningHtml = `
         <div class="route-item" style="border-left-color:#f39c12">
           <b>Befolkning i kriseområdet:</b><br>
-          <span id="bef-tall">👥 ~${totalBef.toLocaleString("no")} personer</span>
+          <span id="bef-tall">👥 ~${totalBef.toLocaleString("no")} personer</span><br>
+          <span id="shelter-count">${crisisShelterCapacity.count} tilfluktsrom i området</span><br>
+          <span id="shelter-capacity">${totalPlasser ? `👥 ${totalPlasser.toLocaleString("no")} plasser total` : "👥 Ingen registrerte plasser"}</span>
           <span id="bef-kapasitet" style="display:block">${kapasitetWarning.replace("<br>", "")}</span>
-          <span id="shelter-plasser" data-plasser="${plasser || 0}" style="display:none"></span>
         </div>`;
     }
  
