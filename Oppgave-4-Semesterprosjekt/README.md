@@ -12,7 +12,8 @@ Dette er prototypen for semesterprosjektet. Applikasjonen lar brukeren:
 
 ## Demonstrasjon
 
-![Demo av systemet](../webkartGIF.gif)
+## Demonstrasjon
+![Demo av systemet Oppgave 4](demo.gif)
 
 ## Teknologi
 
