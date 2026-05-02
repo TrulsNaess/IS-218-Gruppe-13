@@ -1,29 +1,34 @@
 # Oppgave 2 – GIScience og KI
 
-## Endringer siden Canvas-innlevering
-Ingen endringer. Mappestrukturen ble reorganisert for å strukturere semesteroppgaven bedre.
+> ## Endringer siden Canvas-innlevering
+> - Notebook-guiden er samlet i denne README-filen.
+> - Separat `README-OPPGAVE2.md` er fjernet for å holde alt samlet i én fil.
+> - Video/demo er ikke inkludert i denne README.
+
+## Innhold i mappen
+- `Oppgave 2/Oppgave2_218.ipynb` – Python-notebook for GIScience-analyse
+- `sql/Sql_spørringene.sql` – SQL-scripts for database-setup
+- `scripts/import_skred.sh` – Importscript for skreddatasett
+- `scripts/test_rpc.sh` – Test av Supabase RPC-funksjoner
 
 ## Del A: Romlig analyse med GeoJSON
 
 ### Beskrivelse
 Utvidelse av webkartet fra Oppgave 1 med funksjonalitet for romlig filtrering. Brukeren kan nå:
 - **SHIFT+klikk** på kartet for å finne alle punkter (f.eks. skredhendelser) innenfor en 30 km radius
-- Endre radiusen med slider-kontroll
+- Endre radius med slider-kontroll
 - Se sirkel tegnet på kartet som visuell indikator for søkeområdet
 - **Dobbelklikk** for å resette filteret
 
 ### Teknisk implementasjon
-- Bruk av Turf.js bibliotek for geometriske beregninger på klientside
+- Bruk av Turf.js for geometriske beregninger på klientside
 - Dynamisk lagfiltrering basert på avstand
 - Responsiv UI med radius-slider
 
 ## Del B: Spatial Database (Supabase + PostGIS)
 
-### Beskrivelse av romlig utvidelsen
-Implementering av spatial queries i en PostgreSQL+PostGIS database via Supabase. Brukeren kan klikke på kartet for å hente alle features innenfor en valgfri radius fra en cloud-database.
-
-### Demo av system
-Se [GitHub releases](https://github.com/) for video-demo.
+### Beskrivelse
+Implementering av spatial queries i Supabase/PostGIS. Brukeren kan klikke på kartet for å hente alle features innenfor en valgfri radius fra en database.
 
 ### SQL-funksjon
 SQL-funksjonen lagret i Supabase for å hente alle punkter innenfor valgt radius:
@@ -62,12 +67,14 @@ language sql stable as $$
 $$;
 ```
 
-### Innhold i mappen
-- **`sql/Sql_spørringene.sql`** – SQL-scripts for database-setup
-- **`scripts/import_skred.sh`** – GDAL/Ogr2Ogr script for dataimport
-- **`scripts/test_rpc.sh`** – Test av Supabase RPC-funktioner
-- **`Oppgave 2/`** – Notebooks for GIScience-analyse og KI-eksperimenter
-- **`Oppgave2_218.ipynb`** – Python notebook med analyse
+## Notebook-guide
+
+Først må du åpne Google Colab-lenken vår:
+
+https://colab.research.google.com/drive/1ey9-2yTEjBSCmVt0VilnBpcoaWCjtvnt?usp=sharing
+
+### Viktig
+Notebooks og data er skrevet for å hente datasettene fra Google Drive. Les delen "Koble til Google Drive" i notebooken for steg-for-steg veiledning.
 
 ## Referanser
 - Leaflet: https://leafletjs.com/

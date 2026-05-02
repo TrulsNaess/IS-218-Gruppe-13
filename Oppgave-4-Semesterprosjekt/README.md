@@ -1,45 +1,44 @@
 # Oppgave 4 – Semesterprosjekt
 
-## Status
-Under utvikling. Oppgaven skal resultere i:
+## Hva applikasjonen gjør
 
-1. ✅ En teknisk webløsning som visualiserer kriseområder og tilfluktsrom
-2. ⏳ En rapport (PDF, maks 10 sider) som beskriver:
-   - Problemstilling og valgt fordypningsområde
-   - Arbeidsprosess
-   - Utfordringer og løsninger
-   - Kompleksitet i prosjektet
-   - Kvalitetskriterier og sikring av kvalitet
-   - Beskrivelse av løsning med bilder/utsnitt
-   - Sentrale valg (datasett, teknologi, analyser, algoritmer)
-   - Link til teknisk løsning med demo (video/GIF) og GitHub-repo
-   - Diskusjon, refleksjon og lærdom
-   - Forbedringspunkter og kjente svakheter
-   - Konklusjon og referanser
+Dette er prototypen for semesterprosjektet. Applikasjonen lar brukeren:
+- markere et kriseområde ved å klikke på kartet
+- tegne et polygon for mer fleksibel krisedefinisjon
+- søke etter tilfluktsrom fra Supabase/PostGIS
+- beregne evakueringsrute til nærmeste tilfluktsrom utenfor kriseområdet
+- vise kapasitet for tilfluktsrom og estimert befolkning i området
+- laste tilfluktsrom, videregående skoler og grunnskoler fra backend
 
-## Prosjektstruktur
-```
-Oppgave-4-Semesterprosjekt/
-├── README.md (denne filen)
-├── rapport.pdf (endelig rapport)
-├── webkart/ (vidareutviklet webkart)
-│   └── ...
-├── database/ (scripts for dataimport)
-│   └── ...
-├── docs/ (dokumentasjon og bilder)
-│   └── ...
-└── demo/ (video/GIF av løsningen)
-    └── ...
-```
+## Demonstrasjon
 
-## Neste steg
-1. Importer tilfluktsrom-data (GML) til Supabase
-2. Implementer tegneverksamling (polygon/sirkel) i Leaflet
-3. Implementer routingberegning fra kriseområde til tilfluktsrom
-4. Visualiser ruter og tilfluktsrom-informasjon på kartet
-5. Dokumenter prosess og skrive rapport
+![Demo av systemet](../webkartGIF.gif)
+
+## Teknologi
+
+- Frontend: HTML, CSS, JavaScript
+- Kart: Leaflet og Leaflet Draw
+- Backend: Supabase med PostgreSQL/PostGIS
+- Rute/vegbasert beregning: OpenRouteService
+
+## Hvordan åpne
+
+Åpne `Index.html` i `Oppgave-4-Semesterprosjekt/` med VSCode Live Server eller en lokal webserver.
+
+### Viktig
+`supabase-config.js` må inneholde gyldige nøkler for Supabase og OpenRouteService for at datahenting og ruteberegning skal fungere.
+
+## Filene som brukes
+
+- `Index.html` – webapplikasjonens brukergrensesnitt
+- `Main.js` – kartlogikk, Supabase-integrasjon og rutehåndtering
+- `Style.css` – layout og styling
+- `supabase-config.js` – konfigurasjon for Supabase og ORS
+- `Logo.png` – applikasjonslogo
 
 ## Referanser
+
 - Prosjektskisse: `../Oppgave-3-Prosjektskisse/README.md`
-- Oppgave 1 (WebGIS): `../Oppgave-1-WebGIS/README.md`
-- Oppgave 2 (GIScience): `../Oppgave-2-GIScience/README.md`
+- Oppgave 1: `../Oppgave-1-WebGIS/README.md`
+- Oppgave 2: `../Oppgave-2-GIScience/README.md`
+- Oppgave 3: `../Oppgave-3-Prosjektskisse/README.md`
