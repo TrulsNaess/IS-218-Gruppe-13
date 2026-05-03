@@ -44,9 +44,18 @@ Denne mappen inneholder fire oppgaver og en felles dokumentasjon for semesteret.
 
 ---
 
-## Demonstrasjon
+## Demonstrasjon av løsninger
+
+### Oppgave 4 - Semesterprosjekt
+
+![Demo Oppgave 4](Oppgave-4-Semesterprosjekt/demo.gif)
+
+---
+
+### Oppgave 1 - WebKart
 
 ![Demo av systemet](webkartGIF.gif)
+
 
 ---
 
@@ -57,7 +66,7 @@ Denne mappen inneholder fire oppgaver og en felles dokumentasjon for semesteret.
 - **Oppgave 3:** Les `Oppgave-3-Prosjektskisse/README.md` for prosjektplan og problemstilling.
 - **Oppgave 4:** Åpne `Oppgave-4-Semesterprosjekt/Index.html` i VSCode Live Server eller en lokal webserver.
 
-> Oppgave 4 krever at `supabase-config.js` er konfigurert med gyldige tilgangsn�kler for Supabase og OpenRouteService.
+> Oppgave 4 krever at `supabase-config.js` er konfigurert med gyldige tilgangsnøkler for Supabase og OpenRouteService.
 
 ---
 

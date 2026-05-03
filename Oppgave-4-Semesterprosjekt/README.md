@@ -12,7 +12,7 @@ Dette er prototypen for semesterprosjektet. Applikasjonen lar brukeren:
 
 ## Demonstrasjon
 
-## Demonstrasjon
+### Video av applikasjonen
 ![Demo av systemet Oppgave 4](demo.gif)
 
 ## Teknologi
