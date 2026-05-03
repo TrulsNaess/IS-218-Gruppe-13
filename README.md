@@ -14,7 +14,8 @@ Denne mappen inneholder fire oppgaver og en felles dokumentasjon for semesteret.
 - `Oppgave-2-GIScience/` GIScience, KI og notebook-analyse
 - `Oppgave-3-Prosjektskisse/` Prosjektskisse og prosjektplan
 - `Oppgave-4-Semesterprosjekt/` Semesterprosjekt-prototype
-- `webkartGIF.gif` demonstrasjons-GIF for systemet
+- `webkartGIF.gif` demonstrasjons-GIF for WebKart (oppgave 1)
+- `demo.gif` demonstrasjons-GIF for semesterprosjektet (oppgave 4)
 
 ---
 
